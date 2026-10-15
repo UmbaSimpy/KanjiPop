@@ -190,7 +190,7 @@ namespace KanjiPop
             _tray.ContextMenuStrip = menu;
             _tray.MouseClick += (_, e) =>
             {
-                if (e.Button == MouseButtons.Left) { var t = ReadClipboard(); if (t != null) ShowText(t); }
+                if (e.Button == MouseButtons.Left) OpenLibrary(false);
             };
         }
 

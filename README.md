@@ -10,7 +10,7 @@ reading shown above each one) and every word gets its meaning.
 ## Use
 1. Run `KanjiPop.exe` (pink "あ" tray icon). No installation, no admin rights.
 2. Select text in any app and press **Ctrl+C twice** quickly.
-3. **Esc** or a click elsewhere closes the popup. Left-click the tray icon to look up the current clipboard.
+3. **Esc** or a click elsewhere closes the popup. Left-click the tray icon to open your history.
 
 In the popup:
 - **Drag** it anywhere; it will reappear in that spot next time. The **⟲** button (shown once you have moved it) puts it back
