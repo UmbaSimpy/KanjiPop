@@ -8,26 +8,33 @@ It is a word/kanji lookup tool, not a sentence translator. Longer selections are
 reading shown above each one) and every word gets its meaning.
 
 ## Use
-1. Run `KanjiPop.exe` (tray icon "あ"). No installation, no admin rights.
+1. Run `KanjiPop.exe` (pink "あ" tray icon). No installation, no admin rights.
 2. Select text in any app and press **Ctrl+C twice** quickly.
-3. **Esc** or a click elsewhere closes the popup. Tray icon -> *History* lists your recent lookups (click one to reopen it). Left-click the tray icon to look up the current clipboard.
+3. **Esc** or a click elsewhere closes the popup. Left-click the tray icon to look up the current clipboard.
+
+In the popup:
+- **Drag** it anywhere; it will reappear in that spot next time. The **⟲** button (shown once you have moved it) puts it back
+  next to the text again; moving it again makes it remember the new spot.
+- **☆ / ★** adds or removes the lookup from your favorites.
+
+Tray menu: **History…** and **Favorites…** open a page listing past lookups (search, click to look up again, star, delete),
+and **Settings…** opens the settings page (hotkey recorder, popup options, start with Windows).
 
 Conjugated forms work: `食べました`, `読んでいる`, `高くなかった`, `勉強して` resolve to their dictionary form, with the
 reading of the form you selected.
 
 ## Settings
-Tray icon -> *Open settings file* (`%APPDATA%\KanjiPop\config.json`), then *Reload settings*.
+Use the tray icon -> *Settings…*. Values are stored in `%APPDATA%\KanjiPop\config.json`; history, favorites and the
+remembered popup position are in the same folder.
 
-| Key | Default | Meaning |
+| Setting | Default | Meaning |
 |---|---|---|
-| `Hotkey` | `"Ctrl+C"` | Combo such as `"Ctrl+Alt+J"`, `"F8"`. Any hotkey other than Ctrl+C makes the app send the copy itself. |
-| `DoubleTap` | `true` | Press the hotkey twice within `DoubleTapMs`. |
-| `DoubleTapMs` | `500` | Double-press window. |
-| `ShowRomaji` | `false` | Also show romaji. |
-| `ShowKanaWords` | `false` | In multi-word selections, also list kana-only words. |
-| `MaxEntries`, `MaxSensesPerEntry`, `MaxKanji`, `MaxChars` | `3, 5, 10, 120` | Size limits. |
-| `FontSize` | `14` | Base font size. |
-| `AutoCloseSeconds` | `0` | `0` = stay until dismissed. |
+| Shortcut | `Ctrl+C` | Click the box and press any combo (`Ctrl+Alt+J`, `F8`…). Anything other than Ctrl+C makes the app send the copy itself. |
+| Double-tap | on, 500 ms | Press the shortcut twice within the window. |
+| Show romaji / kana-only words | off | Extra popup content. |
+| Font size, auto-close | 14, never | Popup look. |
+| Max entries / meanings / kanji / characters | 3 / 5 / 10 / 120 | Size limits. |
+| History size | 30 | `0` turns history off. |
 
 ## Build from source
 Requires Python 3 and the .NET SDK (10.x).

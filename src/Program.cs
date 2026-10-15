@@ -48,6 +48,7 @@ namespace KanjiPop
             host.Start();
             // --show "text" : popup immediately (for testing/screenshots)
             if (args.Length >= 2 && args[0] == "--show") host.ShowText(args[1]);
+            if (args.Length >= 2 && args[0] == "--open") host.OpenWindow(args[1]);
             return app.Run();
         }
 
@@ -77,22 +78,39 @@ namespace KanjiPop
         }
     }
 
-    /// <summary>Owns tray icon, hooks, dictionary and popup.</summary>
+    /// <summary>Owns tray icon, hooks, dictionary, popup and the settings/library windows.</summary>
     sealed class Host
     {
         Config _cfg = Config.Load();
         readonly Dict _dict;
         Analyzer _analyzer;
-        readonly History _history = History.Load();
+        readonly AppState _state = AppState.Load();
+        readonly ItemStore _history = new("history.json");
+        readonly ItemStore _favorites = new("favorites.json");
+        Analysis? _last;
         PopupWindow _popup;
         InputHooks? _hooks;
         NotifyIcon? _tray;
+        SettingsWindow? _settings;
+        LibraryWindow? _library;
 
         public Host(string dbPath)
         {
             _dict = new Dict(dbPath);
             _analyzer = new Analyzer(_dict, _cfg);
-            _popup = new PopupWindow(_cfg);
+            _popup = NewPopup();
+        }
+
+        PopupWindow NewPopup() => new(_cfg, _state,
+            () => _last != null && _favorites.Contains(_last.Text),
+            ToggleFavorite);
+
+        bool ToggleFavorite()
+        {
+            if (_last == null) return false;
+            if (_favorites.Contains(_last.Text)) { _favorites.Remove(_last.Text); return false; }
+            _favorites.Add(HistoryItem.From(_last), 0);
+            return true;
         }
 
         readonly System.Windows.Threading.DispatcherTimer _trim = new() { Interval = TimeSpan.FromSeconds(4) };
@@ -154,7 +172,8 @@ namespace KanjiPop
             if (!Kana.HasJapanese(text)) return;
             Native.GetCursorPos(out var p);
             var a = _analyzer.Analyze(text);
-            _history.Add(a, _cfg.MaxHistory);
+            _last = a;
+            if (_cfg.MaxHistory > 0 && a.Tokens.Count > 0) _history.Add(HistoryItem.From(a), _cfg.MaxHistory);
             _popup.Present(a, p.X, p.Y);
         }
 
@@ -162,19 +181,10 @@ namespace KanjiPop
         {
             _tray = new NotifyIcon { Icon = MakeIcon(), Visible = true, Text = "KanjiPop" };
             var menu = new ContextMenuStrip();
-            var hist = new ToolStripMenuItem("History");
-            menu.Items.Add(hist);
-            menu.Opening += (_, _) => RefreshHistoryMenu(hist);
             menu.Items.Add("Look up clipboard", null, (_, _) => { var t = ReadClipboard(); if (t != null) ShowText(t); });
-            var auto = new ToolStripMenuItem("Start with Windows") { Checked = IsAutostart(), CheckOnClick = true };
-            auto.CheckedChanged += (_, _) => SetAutostart(auto.Checked);
-            menu.Items.Add(auto);
-            menu.Items.Add("Open settings file", null, (_, _) =>
-            {
-                _cfg.Save();
-                Process.Start(new ProcessStartInfo(Config.FilePath) { UseShellExecute = true });
-            });
-            menu.Items.Add("Reload settings", null, (_, _) => Reload());
+            menu.Items.Add("History…", null, (_, _) => OpenLibrary(false));
+            menu.Items.Add("Favorites…", null, (_, _) => OpenLibrary(true));
+            menu.Items.Add("Settings…", null, (_, _) => OpenSettings());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Quit", null, (_, _) => Quit());
             _tray.ContextMenuStrip = menu;
@@ -184,21 +194,37 @@ namespace KanjiPop
             };
         }
 
-        void RefreshHistoryMenu(ToolStripMenuItem hist)
+        public void OpenWindow(string name)
         {
-            hist.DropDownItems.Clear();
-            if (_history.Items.Count == 0)
+            if (name == "settings") OpenSettings(); else OpenLibrary(name == "favorites");
+        }
+
+        void OpenLibrary(bool favorites)
+        {
+            if (_library == null)
             {
-                hist.DropDownItems.Add(new ToolStripMenuItem("(empty)") { Enabled = false });
-                return;
+                _library = new LibraryWindow(_history, _favorites, ShowText);
+                _library.Closed += (_, _) => _library = null;
+                _library.Show();
             }
-            foreach (var it in _history.Items.ToList())
+            _library.ShowTab(favorites);
+            if (_library.WindowState == System.Windows.WindowState.Minimized) _library.WindowState = System.Windows.WindowState.Normal;
+            _library.Activate();
+        }
+
+        void OpenSettings()
+        {
+            if (_settings != null) { _settings.Activate(); return; }
+            _hooks?.SetEnabled(false); // don't trigger lookups while recording a new shortcut
+            _settings = new SettingsWindow(_cfg, IsAutostart(), (cfg, autostart) =>
             {
-                var text = it.Text;
-                hist.DropDownItems.Add(it.Label, null, (_, _) => ShowText(text));
-            }
-            hist.DropDownItems.Add(new ToolStripSeparator());
-            hist.DropDownItems.Add("Clear history", null, (_, _) => _history.Clear());
+                cfg.Save();
+                SetAutostart(autostart);
+                Reload();
+            });
+            _settings.Closed += (_, _) => { _settings = null; _hooks?.SetEnabled(true); };
+            _settings.Show();
+            _settings.Activate();
         }
 
         void Reload()
@@ -207,8 +233,9 @@ namespace KanjiPop
             _analyzer = new Analyzer(_dict, _cfg);
             _popup.HidePopup();
             _popup.Close();
-            _popup = new PopupWindow(_cfg);
+            _popup = NewPopup();
             InstallHooks();
+            _hooks?.SetEnabled(_settings == null);
         }
 
         void Quit()

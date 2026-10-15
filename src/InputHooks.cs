@@ -48,7 +48,8 @@ namespace KanjiPop
         IntPtr _kb, _ms;
         readonly Hotkey _hk;
         readonly Config _cfg;
-        bool _held;
+        bool _held, _enabled = true;
+        public void SetEnabled(bool on) { _enabled = on; _lastTap = 0; }
         long _lastTap;
         uint _seqAtFirstTap;
 
@@ -96,6 +97,7 @@ namespace KanjiPop
         /// <returns>true to swallow the key.</returns>
         bool OnKeyDown(int vk)
         {
+            if (!_enabled) return false;
             if (IsModifierVk(vk)) return false;
             if (vk == (int)Keys.Escape)
             {

@@ -3,40 +3,34 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Threading;
+using static KanjiPop.Theme;
 
 namespace KanjiPop
 {
-    /// <summary>Borderless, non-activating popup that shows an Analysis near the cursor.</summary>
+    /// <summary>Borderless, non-activating popup that shows an Analysis near the cursor. Draggable; remembers where you put it.</summary>
     public sealed class PopupWindow : Window
     {
-        static readonly Brush Bg = Frozen("#F2202127");
-        static readonly Brush Border_ = Frozen("#3A3C46");
-        static readonly Brush Fg = Frozen("#ECECF0");
-        static readonly Brush Dim = Frozen("#9A9CA8");
-        static readonly Brush Accent = Frozen("#7CC4FF");
-        static readonly Brush PosBrush = Frozen("#E8B96A");
-        static readonly FontFamily Font = new("Yu Gothic UI, Meiryo UI, Segoe UI");
+        const int Margin_ = 14; // transparent margin around the card (room for the shadow)
 
         readonly Config _cfg;
+        readonly AppState _state;
+        readonly Func<bool> _isFav;
+        readonly Func<bool> _toggleFav;
         readonly Border _card;
         readonly ScrollViewer _scroll;
+        readonly TextBlock _star, _reset;
         readonly DispatcherTimer _autoClose = new();
         Native.RECT _rect;
+        int _cursorX, _cursorY;
 
-        static Brush Frozen(string hex)
+        public PopupWindow(Config cfg, AppState state, Func<bool> isFav, Func<bool> toggleFav)
         {
-            var b = (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
-            b.Freeze();
-            return b;
-        }
-
-        public PopupWindow(Config cfg)
-        {
-            _cfg = cfg;
+            _cfg = cfg; _state = state; _isFav = isFav; _toggleFav = toggleFav;
             WindowStyle = WindowStyle.None;
             AllowsTransparency = true;
             Background = Brushes.Transparent;
@@ -53,7 +47,7 @@ namespace KanjiPop
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                MaxHeight = 560,
+                MaxHeight = 540,
             };
             _scroll.Resources[typeof(System.Windows.Controls.Primitives.ScrollBar)] = (Style)System.Windows.Markup.XamlReader.Parse(
                 "<Style xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' " +
@@ -61,23 +55,60 @@ namespace KanjiPop
                 "<ControlTemplate TargetType='ScrollBar'><Border Background='Transparent'><Track Name='PART_Track' IsDirectionReversed='True'>" +
                 "<Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType='Thumb'><Border Background='#5A5D6B' CornerRadius='3' Margin='1,0'/>" +
                 "</ControlTemplate></Thumb.Template></Thumb></Track.Thumb></Track></Border></ControlTemplate></Setter.Value></Setter></Style>");
+
+            _star = IconButton("☆", "Add to favorites");
+            _star.MouseLeftButtonUp += (_, _) => { _star.Text = _toggleFav() ? "★" : "☆"; _star.Foreground = _star.Text == "★" ? Gold : Dim; };
+            _reset = IconButton("⟲", "Reset position (show next to the text again)");
+            _reset.MouseLeftButtonUp += (_, _) => ResetPosition();
+
+            var grip = new TextBlock
+            {
+                Text = "⠿ drag to move", FontSize = 10, Foreground = Dim, VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0.7, FontFamily = Symbols,
+            };
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            buttons.Children.Add(_reset);
+            buttons.Children.Add(_star);
+            var bar = new Grid { Margin = new Thickness(0, 0, 8, 4) };
+            bar.Children.Add(grip);
+            bar.Children.Add(buttons);
+
+            var dock = new DockPanel();
+            DockPanel.SetDock(bar, Dock.Top);
+            dock.Children.Add(bar);
+            dock.Children.Add(_scroll);
+
             _card = new Border
             {
-                Margin = new Thickness(14),
+                Margin = new Thickness(Margin_),
                 CornerRadius = new CornerRadius(10),
                 Background = Bg,
                 BorderBrush = Border_,
                 BorderThickness = new Thickness(1),
-                Padding = new Thickness(14, 12, 6, 12),
+                Padding = new Thickness(14, 8, 6, 12),
                 MaxWidth = 500,
-                MinWidth = 220,
-                Child = _scroll,
+                MinWidth = 240,
+                Child = dock,
                 Effect = new DropShadowEffect { BlurRadius = 16, ShadowDepth = 3, Opacity = 0.45 },
             };
+            _card.MouseLeftButtonDown += OnCardMouseDown;
             Content = _card;
             _autoClose.Tick += (_, _) => HidePopup();
             SourceInitialized += (_, _) =>
                 Native.AddExStyle(new WindowInteropHelper(this).Handle, Native.WS_EX_NOACTIVATE | Native.WS_EX_TOOLWINDOW);
+        }
+
+        static TextBlock IconButton(string glyph, string tip)
+        {
+            var t = new TextBlock
+            {
+                Text = glyph, FontSize = 17, Foreground = Dim, FontFamily = Symbols, Cursor = Cursors.Hand,
+                Margin = new Thickness(8, -2, 0, 0), ToolTip = tip, Background = Brushes.Transparent,
+            };
+            t.MouseEnter += (_, _) => t.Foreground = Accent;
+            t.MouseLeave += (_, _) => t.Foreground = t.Text == "★" ? Gold : Dim;
+            t.MouseLeftButtonDown += (_, e) => e.Handled = true; // don't start a drag from a button
+            return t;
         }
 
         public bool IsShown => IsVisible && Opacity > 0;
@@ -92,27 +123,76 @@ namespace KanjiPop
         public bool ContainsPx(int x, int y) =>
             IsShown && x >= _rect.Left && x <= _rect.Right && y >= _rect.Top && y <= _rect.Bottom;
 
-        public void Present(Analysis a, int cursorX, int cursorY)
+        void OnCardMouseDown(object sender, MouseButtonEventArgs e)
         {
-            _scroll.Content = Build(a);
-            _scroll.ScrollToTop();
-            Opacity = 0;
-            if (!IsVisible) Show();
-            UpdateLayout();
+            if (e.ChangedButton != MouseButton.Left) return;
+            var hwnd = new WindowInteropHelper(this).Handle;
+            Native.GetWindowRect(hwnd, out var before);
+            try { DragMove(); } catch (InvalidOperationException) { return; }
+            Native.GetWindowRect(hwnd, out var after);
+            if (after.Left == before.Left && after.Top == before.Top) return;
+            _state.HasPos = true; _state.X = after.Left; _state.Y = after.Top;
+            _state.Save();
+            SetRect(after);
+            _reset.Visibility = Visibility.Visible;
+        }
+
+        void ResetPosition()
+        {
+            _state.HasPos = false;
+            _state.Save();
+            _reset.Visibility = Visibility.Collapsed;
+            Place(false);
+        }
+
+        void SetRect(Native.RECT r)
+        {
+            _rect = r;
+            _rect.Left += Margin_; _rect.Top += Margin_; _rect.Right -= Margin_; _rect.Bottom -= Margin_;
+        }
+
+        /// <summary>Move to the remembered spot (if useSaved and one exists) or next to the cursor.</summary>
+        void Place(bool useSaved)
+        {
             var hwnd = new WindowInteropHelper(this).Handle;
             Native.GetWindowRect(hwnd, out var r);
             int w = r.Right - r.Left, h = r.Bottom - r.Top;
-            var wa = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(cursorX, cursorY)).WorkingArea;
-            int margin = 14; // shadow margin of the card
-            int x = cursorX + 8 - margin, y = cursorY + 20 - margin;
-            if (x + w > wa.Right) x = wa.Right - w;
-            if (x < wa.Left) x = wa.Left;
-            if (y + h > wa.Bottom) y = cursorY - h + margin - 14;
-            if (y < wa.Top) y = wa.Top;
+            int x, y;
+            if (useSaved && _state.HasPos)
+            {
+                x = _state.X; y = _state.Y;
+                var wa = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(x + w / 2, y + h / 2)).WorkingArea;
+                x = Math.Max(wa.Left, Math.Min(x, wa.Right - w));
+                y = Math.Max(wa.Top, Math.Min(y, wa.Bottom - h));
+            }
+            else
+            {
+                var wa = System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(_cursorX, _cursorY)).WorkingArea;
+                x = _cursorX + 8 - Margin_; y = _cursorY + 20 - Margin_;
+                if (x + w > wa.Right) x = wa.Right - w;
+                if (x < wa.Left) x = wa.Left;
+                if (y + h > wa.Bottom) y = _cursorY - h + Margin_ - 14;
+                if (y < wa.Top) y = wa.Top;
+            }
             Native.SetWindowPos(hwnd, Native.HWND_TOPMOST, x, y, 0, 0,
                 Native.SWP_NOSIZE | Native.SWP_NOACTIVATE | Native.SWP_SHOWWINDOW);
-            Native.GetWindowRect(hwnd, out _rect);
-            _rect.Left += margin; _rect.Top += margin; _rect.Right -= margin; _rect.Bottom -= margin;
+            Native.GetWindowRect(hwnd, out var now);
+            SetRect(now);
+        }
+
+        public void Present(Analysis a, int cursorX, int cursorY)
+        {
+            _cursorX = cursorX; _cursorY = cursorY;
+            _scroll.Content = Build(a);
+            _scroll.ScrollToTop();
+            bool fav = _isFav();
+            _star.Text = fav ? "★" : "☆";
+            _star.Foreground = fav ? Gold : Dim;
+            _reset.Visibility = _state.HasPos ? Visibility.Visible : Visibility.Collapsed;
+            Opacity = 0;
+            if (!IsVisible) Show();
+            UpdateLayout();
+            Place(true);
             Opacity = 1;
             if (_cfg.AutoCloseSeconds > 0)
             {
