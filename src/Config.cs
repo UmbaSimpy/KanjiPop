@@ -18,6 +18,7 @@ namespace KanjiPop
         public int MaxEntries { get; set; } = 3;
         public int MaxSensesPerEntry { get; set; } = 5;
         public int MaxKanji { get; set; } = 10;
+        public int MaxHistory { get; set; } = 30;
         public int MaxChars { get; set; } = 120;
         public double FontSize { get; set; } = 14;
         /// <summary>0 = stay until Esc / click elsewhere.</summary>

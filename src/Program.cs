@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -82,6 +83,7 @@ namespace KanjiPop
         Config _cfg = Config.Load();
         readonly Dict _dict;
         Analyzer _analyzer;
+        readonly History _history = History.Load();
         PopupWindow _popup;
         InputHooks? _hooks;
         NotifyIcon? _tray;
@@ -152,6 +154,7 @@ namespace KanjiPop
             if (!Kana.HasJapanese(text)) return;
             Native.GetCursorPos(out var p);
             var a = _analyzer.Analyze(text);
+            _history.Add(a, _cfg.MaxHistory);
             _popup.Present(a, p.X, p.Y);
         }
 
@@ -159,6 +162,9 @@ namespace KanjiPop
         {
             _tray = new NotifyIcon { Icon = MakeIcon(), Visible = true, Text = "KanjiPop" };
             var menu = new ContextMenuStrip();
+            var hist = new ToolStripMenuItem("History");
+            menu.Items.Add(hist);
+            menu.Opening += (_, _) => RefreshHistoryMenu(hist);
             menu.Items.Add("Look up clipboard", null, (_, _) => { var t = ReadClipboard(); if (t != null) ShowText(t); });
             var auto = new ToolStripMenuItem("Start with Windows") { Checked = IsAutostart(), CheckOnClick = true };
             auto.CheckedChanged += (_, _) => SetAutostart(auto.Checked);
@@ -176,6 +182,23 @@ namespace KanjiPop
             {
                 if (e.Button == MouseButtons.Left) { var t = ReadClipboard(); if (t != null) ShowText(t); }
             };
+        }
+
+        void RefreshHistoryMenu(ToolStripMenuItem hist)
+        {
+            hist.DropDownItems.Clear();
+            if (_history.Items.Count == 0)
+            {
+                hist.DropDownItems.Add(new ToolStripMenuItem("(empty)") { Enabled = false });
+                return;
+            }
+            foreach (var it in _history.Items.ToList())
+            {
+                var text = it.Text;
+                hist.DropDownItems.Add(it.Label, null, (_, _) => ShowText(text));
+            }
+            hist.DropDownItems.Add(new ToolStripSeparator());
+            hist.DropDownItems.Add("Clear history", null, (_, _) => _history.Clear());
         }
 
         void Reload()
@@ -212,18 +235,8 @@ namespace KanjiPop
 
         static Icon MakeIcon()
         {
-            using var bmp = new Bitmap(32, 32);
-            using (var g = Graphics.FromImage(bmp))
-            {
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-                using var br = new SolidBrush(Color.FromArgb(46, 120, 200));
-                g.FillEllipse(br, 0, 0, 31, 31);
-                using var f = new Font("Yu Gothic UI", 17, System.Drawing.FontStyle.Bold, GraphicsUnit.Pixel);
-                var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-                g.DrawString("あ", f, Brushes.White, new RectangleF(0, 1, 32, 32), sf);
-            }
-            return Icon.FromHandle(bmp.GetHicon());
+            using var st = typeof(Host).Assembly.GetManifestResourceStream("app.ico")!;
+            return new Icon(st, SystemInformation.SmallIconSize);
         }
     }
 }
