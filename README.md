@@ -8,11 +8,11 @@ It is a word/kanji lookup tool, not a sentence translator. Longer selections are
 reading shown above each one) and every word gets its meaning.
 
 ## Use
-1. Run `KanjiPop.exe` (tray icon "ã‚"). No installation, no admin rights.
+1. Run `KanjiPop.exe` (tray icon "あ"). No installation, no admin rights.
 2. Select text in any app and press **Ctrl+C twice** quickly.
 3. **Esc** or a click elsewhere closes the popup. Tray icon -> *History* lists your recent lookups (click one to reopen it). Left-click the tray icon to look up the current clipboard.
 
-Conjugated forms work: `é£Ÿã¹ã¾ã—ãŸ`, `èª­ã‚“ã§ã„ã‚‹`, `é«˜ããªã‹ã£ãŸ`, `å‹‰å¼·ã—ã¦` resolve to their dictionary form, with the
+Conjugated forms work: `食べました`, `読んでいる`, `高くなかった`, `勉強して` resolve to their dictionary form, with the
 reading of the form you selected.
 
 ## Settings
