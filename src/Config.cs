@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 
@@ -18,6 +19,8 @@ namespace KanjiPop
         public int MaxEntries { get; set; } = 3;
         public int MaxSensesPerEntry { get; set; } = 5;
         public int MaxKanji { get; set; } = 10;
+        /// <summary>Process names (e.g. "game" or "game.exe") in which the hotkey is ignored.</summary>
+        public List<string> PausedApps { get; set; } = new();
         public int MaxHistory { get; set; } = 30;
         public int MaxChars { get; set; } = 120;
         public double FontSize { get; set; } = 14;

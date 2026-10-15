@@ -54,6 +54,8 @@ namespace KanjiPop
         uint _seqAtFirstTap;
 
         public Func<bool> PopupVisible = () => false;
+        /// <summary>Return true to ignore the hotkey right now (paused app / paused globally).</summary>
+        public Func<bool>? Paused;
         public event Action<TriggerInfo>? Triggered;
         public event Action? EscapePressed;
         public event Action<int, int>? MouseClicked;
@@ -108,6 +110,7 @@ namespace KanjiPop
             if (_held) return !_hk.IsPlainCopy;      // auto-repeat
             _held = true;
             if (!ModsMatch()) { _lastTap = 0; return false; }
+            if (Paused?.Invoke() == true) { _lastTap = 0; return false; }
 
             bool swallow = !_hk.IsPlainCopy;
             long now = Environment.TickCount64;

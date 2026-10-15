@@ -4,7 +4,7 @@ Usage:  python tools/build_dict.py [raw_dir] [out_db]
 Downloads the source files into raw_dir if missing.
 Source data (c) EDRDG, licensed CC BY-SA 4.0 - see README.
 """
-import gzip, json, os, sqlite3, sys, urllib.request
+import csv, gzip, json, os, sqlite3, sys, urllib.request
 import xml.etree.ElementTree as ET
 
 RAW = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(__file__), "raw")
@@ -13,7 +13,31 @@ SOURCES = {
     "JMdict_e.gz": "http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz",
     "kanjidic2.xml.gz": "http://ftp.edrdg.org/pub/Nihongo/kanjidic2.xml.gz",
 }
+FREQ_URL = "https://api.jiten.moe/api/frequency-list/download?downloadType=csv"  # Jiten, CC BY-SA 4.0
 COMMON_TAGS = {"news1", "ichi1", "spec1", "spec2", "gai1"}
+
+
+def load_freq():
+    """(written form, reading) -> best rank. Returns {} (no ranking) if the list is unavailable."""
+    path = os.path.join(RAW, "jiten_freq.csv")
+    try:
+        if not os.path.exists(path):
+            print("downloading", FREQ_URL)
+            req = urllib.request.Request(FREQ_URL, headers={"User-Agent": "KanjiPop-build"})
+            with urllib.request.urlopen(req, timeout=120) as r, open(path, "wb") as f:
+                f.write(r.read())
+        freq = {}
+        with open(path, encoding="utf-8", newline="") as f:
+            for row in csv.DictReader(f):
+                key = (row["Word"], row["Form"])
+                rank = int(row["Rank"])
+                if key not in freq or rank < freq[key]:
+                    freq[key] = rank
+        print("frequency pairs:", len(freq))
+        return freq
+    except Exception as e:  # build still works, just without frequency ordering
+        print("WARNING: frequency list unavailable:", e)
+        return {}
 
 
 def fetch():
@@ -50,11 +74,12 @@ def score_of(tags):
 def build_words(db):
     db.executescript(
         """
-        CREATE TABLE entry(id INTEGER PRIMARY KEY, common INTEGER, score INTEGER,
+        CREATE TABLE entry(id INTEGER PRIMARY KEY, common INTEGER, score INTEGER, rank INTEGER,
                            kanji TEXT, readings TEXT, senses TEXT);
         CREATE TABLE lookup(text TEXT, entry_id INTEGER);
         """
     )
+    freq = load_freq()
     path = os.path.join(RAW, "JMdict_e.gz")
     rows, looks = [], []
     n = 0
@@ -95,7 +120,19 @@ def build_words(db):
                     pos = last_pos
                 misc = [short_pos(m.text) for m in s.findall("misc")]
                 senses.append({"pos": pos, "misc": misc, "g": glosses})
-            rows.append((eid, int(bool(alltags & COMMON_TAGS)), score_of(alltags),
+            rank = 0  # 0 = not in the frequency list
+            best = None
+            # the bare-kana spelling only counts for words normally written in kana, otherwise
+            # every homophone (葉, 歯, 派...) would inherit the rank of the particle は
+            kana_ok = not kanji or any("usually written using kana alone" in m for sn in senses for m in sn["misc"])
+            for r in readings:
+                for k in [x["k"] for x in kanji] + ([r["r"]] if kana_ok else []):
+                    v = freq.get((k, r["r"]))
+                    if v is not None and (best is None or v < best):
+                        best = v
+            if best is not None:
+                rank = best
+            rows.append((eid, int(bool(alltags & COMMON_TAGS)), score_of(alltags), rank,
                          json.dumps(kanji, ensure_ascii=False),
                          json.dumps(readings, ensure_ascii=False),
                          json.dumps(senses, ensure_ascii=False)))
@@ -105,7 +142,7 @@ def build_words(db):
                 looks.append((r["r"], eid))
             el.clear()
             n += 1
-    db.executemany("INSERT INTO entry VALUES (?,?,?,?,?,?)", rows)
+    db.executemany("INSERT INTO entry VALUES (?,?,?,?,?,?,?)", rows)
     db.executemany("INSERT INTO lookup VALUES (?,?)", looks)
     db.execute("CREATE INDEX idx_lookup ON lookup(text)")
     print("entries:", n, "lookup rows:", len(looks))

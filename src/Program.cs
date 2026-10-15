@@ -92,6 +92,7 @@ namespace KanjiPop
         InputHooks? _hooks;
         NotifyIcon? _tray;
         SettingsWindow? _settings;
+        bool _pausedAll;
         LibraryWindow? _library;
 
         public Host(string dbPath)
@@ -130,7 +131,7 @@ namespace KanjiPop
             _hooks?.Dispose();
             try
             {
-                _hooks = new InputHooks(_cfg) { PopupVisible = () => _popup.IsShown };
+                _hooks = new InputHooks(_cfg) { PopupVisible = () => _popup.IsShown, Paused = IsPaused };
                 _hooks.Triggered += t => System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(async () => await OnTriggered(t)));
                 _hooks.EscapePressed += () => System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() => { _popup.HidePopup(); ScheduleTrim(); }));
                 _hooks.MouseClicked += (x, y) => System.Windows.Application.Current.Dispatcher.BeginInvoke(new Action(() =>
@@ -143,6 +144,15 @@ namespace KanjiPop
             {
                 System.Windows.MessageBox.Show("Cannot use hotkey '" + _cfg.Hotkey + "':\n" + ex.Message, "KanjiPop");
             }
+        }
+
+        bool IsPaused()
+        {
+            if (_pausedAll) return true;
+            if (_cfg.PausedApps.Count == 0) return false;
+            var fg = Native.ForegroundProcessName();
+            return fg.Length > 0 && _cfg.PausedApps.Any(a =>
+                string.Equals(System.IO.Path.GetFileNameWithoutExtension(a.Trim()), fg, StringComparison.OrdinalIgnoreCase));
         }
 
         async Task OnTriggered(TriggerInfo t)
@@ -185,6 +195,13 @@ namespace KanjiPop
             menu.Items.Add("History…", null, (_, _) => OpenLibrary(false));
             menu.Items.Add("Favorites…", null, (_, _) => OpenLibrary(true));
             menu.Items.Add("Settings…", null, (_, _) => OpenSettings());
+            var pause = new ToolStripMenuItem("Pause everywhere") { CheckOnClick = true };
+            pause.CheckedChanged += (_, _) =>
+            {
+                _pausedAll = pause.Checked;
+                if (_tray != null) _tray.Text = _pausedAll ? "KanjiPop — paused" : $"KanjiPop — {_cfg.Hotkey}{(_cfg.DoubleTap ? " ×2" : "")}";
+            };
+            menu.Items.Add(pause);
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Quit", null, (_, _) => Quit());
             _tray.ContextMenuStrip = menu;

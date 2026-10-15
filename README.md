@@ -34,6 +34,7 @@ remembered popup position are in the same folder.
 | Show romaji / kana-only words | off | Extra popup content. |
 | Font size, auto-close | 14, never | Popup look. |
 | Max entries / meanings / kanji / characters | 3 / 5 / 10 / 120 | Size limits. |
+| Pause in these apps | none | The hotkey is ignored while one of these apps has focus (add by name, or pick from running apps). The tray menu also has *Pause everywhere*. |
 | History size | 30 | `0` turns history off. |
 
 ## Build from source
@@ -49,6 +50,6 @@ Pushing a `v*` tag builds the release zip on GitHub Actions and attaches it to a
 - Selection is read through the clipboard (the app you select in performs the copy). Text drawn as pictures
   (games, scans) cannot be read.
 - Word splitting is longest-match against the dictionary. It is not a full morphological analyser, so unusual
-  sentences can be split imperfectly, and homographs are ordered by JMdict priority tags (the most likely reading
-  is not always first; up to 3 entries are shown).
+  sentences can be split imperfectly. Homographs are ordered by real-world word frequency (Jiten list), so the most
+  common word comes first; up to 3 entries are shown.
 - Dictionary data: see [NOTICE.md](NOTICE.md) (EDRDG, CC BY-SA 4.0).

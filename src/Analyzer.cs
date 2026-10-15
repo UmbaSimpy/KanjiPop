@@ -21,6 +21,7 @@ namespace KanjiPop
         public List<Sense> Senses = new();
         public bool Common;
         public int Score;
+        public int Rank;
         public bool Direct = true;
         public string DictForm = "";
         public string Reasons = "";
@@ -115,23 +116,16 @@ namespace KanjiPop
             }
             return found
                 .OrderByDescending(v => v.Direct)
+                .ThenBy(v => v.Rank)
                 .ThenByDescending(v => v.Score)
                 .ThenByDescending(v => v.Common)
                 .ThenBy(v => v.Id)
                 .ToList();
         }
 
-        /// <summary>Kana queries should prefer words normally written in kana (particles, etc.).</summary>
-        static int KanaBoost(RawEntry e, string matched)
-        {
-            if (Kana.HasKanji(matched)) return 0;
-            if (e.Kanji.Count == 0) return 100;
-            return e.Senses.Any(s => s.Misc.Any(m => m.Contains("usually written using kana alone"))) ? 100 : 0;
-        }
-
         EntryView Make(RawEntry e, string matched, string surface, Deinflector.Cand? cand)
         {
-            var v = new EntryView { Id = e.Id, Common = e.Common, Score = e.Score + KanaBoost(e, matched), Direct = cand == null };
+            var v = new EntryView { Id = e.Id, Common = e.Common, Score = e.Score, Rank = e.Rank == 0 ? int.MaxValue : e.Rank, Direct = cand == null };
             bool asKanji = e.Kanji.Any(k => k.K == matched);
             v.Headword = matched;
             if (asKanji)

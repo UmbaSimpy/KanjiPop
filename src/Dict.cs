@@ -31,6 +31,7 @@ namespace KanjiPop
         public long Id;
         public bool Common;
         public int Score;
+        public int Rank; // frequency rank (1 = most common), 0 = unranked
         public List<KForm> Kanji = new();
         public List<RForm> Readings = new();
         public List<SenseRaw> Senses = new();
@@ -61,7 +62,7 @@ namespace KanjiPop
             }
             _find = _conn.CreateCommand();
             _find.CommandText =
-                "SELECT e.id,e.common,e.score,e.kanji,e.readings,e.senses FROM lookup l " +
+                "SELECT e.id,e.common,e.score,e.rank,e.kanji,e.readings,e.senses FROM lookup l " +
                 "JOIN entry e ON e.id=l.entry_id WHERE l.text=$t";
             _find.Parameters.Add("$t", SqliteType.Text);
             _kanji = _conn.CreateCommand();
@@ -81,9 +82,10 @@ namespace KanjiPop
                     Id = rd.GetInt64(0),
                     Common = rd.GetInt32(1) != 0,
                     Score = rd.GetInt32(2),
-                    Kanji = JsonSerializer.Deserialize<List<KForm>>(rd.GetString(3)) ?? new(),
-                    Readings = JsonSerializer.Deserialize<List<RForm>>(rd.GetString(4)) ?? new(),
-                    Senses = JsonSerializer.Deserialize<List<SenseRaw>>(rd.GetString(5)) ?? new(),
+                    Rank = rd.GetInt32(3),
+                    Kanji = JsonSerializer.Deserialize<List<KForm>>(rd.GetString(4)) ?? new(),
+                    Readings = JsonSerializer.Deserialize<List<RForm>>(rd.GetString(5)) ?? new(),
+                    Senses = JsonSerializer.Deserialize<List<SenseRaw>>(rd.GetString(6)) ?? new(),
                 });
             }
             return list;

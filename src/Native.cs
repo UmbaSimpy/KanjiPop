@@ -68,6 +68,29 @@ namespace KanjiPop
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] static extern IntPtr SetWL(IntPtr h, int i, IntPtr v);
         [DllImport("user32.dll")] static extern uint SendInput(uint n, INPUT[] inputs, int size);
         [DllImport("kernel32.dll")] public static extern bool AttachConsole(int pid);
+        [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+        [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+        [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr h);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+        static extern bool QueryFullProcessImageName(IntPtr h, uint flags, System.Text.StringBuilder name, ref uint size);
+
+        /// <summary>Executable name (without extension) of the window that has the keyboard focus, or "".</summary>
+        public static string ForegroundProcessName()
+        {
+            GetWindowThreadProcessId(GetForegroundWindow(), out var pid);
+            if (pid == 0) return "";
+            var h = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, pid);
+            if (h == IntPtr.Zero) return "";
+            try
+            {
+                var sb = new System.Text.StringBuilder(520);
+                uint n = (uint)sb.Capacity;
+                return QueryFullProcessImageName(h, 0, sb, ref n)
+                    ? System.IO.Path.GetFileNameWithoutExtension(sb.ToString(0, (int)n)) : "";
+            }
+            finally { CloseHandle(h); }
+        }
         [DllImport("kernel32.dll")] static extern bool SetProcessWorkingSetSize(IntPtr h, IntPtr min, IntPtr max);
 
         /// <summary>Hand idle memory back to Windows (keeps the always-on footprint small).</summary>

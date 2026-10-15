@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Linq;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,6 +20,8 @@ namespace KanjiPop
         readonly CheckBox _double = new(), _romaji = new(), _kana = new(), _autostart = new();
         readonly Dictionary<string, TextBox> _nums = new();
         readonly TextBlock _status = new();
+        readonly ListBox _paused = new();
+        readonly TextBox _appName = new();
         string _hotkeyValue;
 
         public SettingsWindow(Config current, bool autostart, Action<Config, bool> onSave)
@@ -27,14 +31,15 @@ namespace KanjiPop
             _hotkeyValue = _cfg.Hotkey;
 
             Title = "KanjiPop settings";
-            Width = 460; SizeToContent = SizeToContent.Height;
+            Width = 480; SizeToContent = SizeToContent.Height;
             ResizeMode = ResizeMode.NoResize;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             Background = Solid; Foreground = Fg; FontFamily = Font; FontSize = 14;
             DarkTitleBar(this);
 
             var root = new StackPanel { Margin = new Thickness(22, 18, 22, 18) };
-            Content = root;
+            MaxHeight = SystemParameters.WorkArea.Height - 20;
+            Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = root };
 
             root.Children.Add(Heading("Hotkey"));
             _hotkey.IsReadOnly = true;
@@ -52,6 +57,24 @@ namespace KanjiPop
             root.Children.Add(Row("Double-tap window (ms)", Num("DoubleTapMs", _cfg.DoubleTapMs)));
             _status.Foreground = Accent; _status.FontSize = 12; _status.Margin = new Thickness(0, 2, 0, 0);
             root.Children.Add(_status);
+
+            root.Children.Add(Heading("Pause in these apps"));
+            root.Children.Add(new TextBlock
+            {
+                Text = "The hotkey is ignored while one of these apps has focus (for example games).",
+                Foreground = Dim, FontSize = 12, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6),
+            });
+            _paused.Height = 84; _paused.Background = Field; _paused.Foreground = Fg; _paused.BorderBrush = Border_;
+            foreach (var a in _cfg.PausedApps) _paused.Items.Add(a);
+            root.Children.Add(_paused);
+            Style(_appName); _appName.ToolTip = "Executable name, e.g. game or game.exe";
+            var addRow = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
+            var remove = Btn("Remove"); remove.Click += (_, _) => { if (_paused.SelectedItem != null) _paused.Items.Remove(_paused.SelectedItem); };
+            var running = Btn("Running apps ▾"); running.Click += (_, _) => ShowRunning(running);
+            var add = Btn("Add"); add.Click += (_, _) => AddApp(_appName.Text);
+            foreach (var b in new[] { remove, running, add }) { DockPanel.SetDock(b, Dock.Right); addRow.Children.Add(b); }
+            addRow.Children.Add(_appName);
+            root.Children.Add(addRow);
 
             root.Children.Add(Heading("Popup"));
             _romaji.Content = "Show romaji"; _romaji.IsChecked = _cfg.ShowRomaji; root.Children.Add(Check(_romaji));
@@ -82,6 +105,7 @@ namespace KanjiPop
             _hotkeyValue = c.Hotkey; _hotkey.Text = c.Hotkey;
             _double.IsChecked = c.DoubleTap; _romaji.IsChecked = c.ShowRomaji; _kana.IsChecked = c.ShowKanaWords;
             _autostart.IsChecked = autostart;
+            _paused.Items.Clear();
             _nums["DoubleTapMs"].Text = c.DoubleTapMs.ToString();
             _nums["FontSize"].Text = ((int)c.FontSize).ToString();
             _nums["AutoCloseSeconds"].Text = c.AutoCloseSeconds.ToString();
@@ -114,8 +138,33 @@ namespace KanjiPop
             _cfg.MaxKanji = N("MaxKanji", 0, 40, 10);
             _cfg.MaxChars = N("MaxChars", 1, 1000, 120);
             _cfg.MaxHistory = N("MaxHistory", 0, 1000, 30);
+            _cfg.PausedApps = _paused.Items.Cast<string>().ToList();
             _onSave(_cfg, _autostart.IsChecked == true);
             Close();
+        }
+
+        void AddApp(string raw)
+        {
+            var name = System.IO.Path.GetFileNameWithoutExtension(raw.Trim());
+            if (name.Length > 0 && !_paused.Items.Cast<string>().Any(x => string.Equals(x, name, StringComparison.OrdinalIgnoreCase)))
+                _paused.Items.Add(name);
+            _appName.Clear();
+        }
+
+        void ShowRunning(Button anchor)
+        {
+            var menu = new ContextMenu { PlacementTarget = anchor, MaxHeight = 400 };
+            var me = Process.GetCurrentProcess().Id;
+            foreach (var n in Process.GetProcesses()
+                .Where(p => p.MainWindowHandle != IntPtr.Zero && p.Id != me)
+                .Select(p => p.ProcessName).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+            {
+                var item = new MenuItem { Header = n };
+                var name = n;
+                item.Click += (_, _) => AddApp(name);
+                menu.Items.Add(item);
+            }
+            menu.IsOpen = true;
         }
 
         void OnHotkeyKey(object sender, KeyEventArgs e)
