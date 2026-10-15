@@ -11,3 +11,7 @@ Development Group (EDRDG), used under the Creative Commons Attribution-ShareAlik
 
 See https://www.edrdg.org/edrdg/licence.html. The generated database is a derivative work and is
 distributed under the same CC BY-SA 4.0 terms.
+
+# Software
+
+The macOS app uses [Avalonia](https://avaloniaui.net/) (MIT licence).

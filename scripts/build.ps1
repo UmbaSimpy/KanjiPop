@@ -6,7 +6,7 @@ Set-Location $root
 if (-not (Test-Path data/dict.db)) { python tools/build_dict.py }
 $out = Join-Path $root "dist/KanjiPop"
 if (Test-Path $out) { [System.IO.Directory]::Delete($out, $true) }
-dotnet publish src/KanjiPop.csproj -c Release -r win-x64 --self-contained `
+dotnet publish src/KanjiPop/KanjiPop.csproj -c Release -r win-x64 --self-contained `
     -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true `
     -o $out
 if ($LASTEXITCODE -ne 0) { throw "publish failed" }
